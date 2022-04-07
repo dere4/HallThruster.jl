@@ -31,9 +31,8 @@ nϵ_func = eval(build_function(nϵ, [x]))
 ue_func = eval(build_function(expand_derivatives(ue), [x]))
 ∇ϕ_func = eval(build_function(expand_derivatives(∇ϕ), [x]))
 ρn_func = eval(build_function(ρn, [x]))
-ϵ_func = eval(build_function(ϵ, [x]))
 
-k(ϵ) = 12.12 * OVS_rate_coeff_iz(ϵ) + 8.32 * OVS_rate_coeff_ex(ϵ)
+k(ϵ) = HallThruster.LandmarkLossFit()(ϵ)
 W(ϵ) = 1e7 * ϵ * exp(-20 / ϵ)
 energy_eq = Dt(nϵ) + Dx(5/3 * nϵ * ue - 10/9 * μ * nϵ * Dx(nϵ/ne)) + ne * (-ue * Dx(ϕ) + nn * k(ϵ) + W(ϵ))
 source_energy = eval(build_function(expand_derivatives(energy_eq), [x]))
@@ -73,7 +72,6 @@ function verify_energy(ncells; niters = 10000, plot_results = false)
     ∇ϕ = ∇ϕ_func.(z_cell)
     ρn = ρn_func.(z_cell)
     U = zeros(2, ncells)
-    Tev = ϵ_func.(z_cell) * 2/3
 
     nϵ_exact = nϵ_func.(z_cell)
 
@@ -94,10 +92,7 @@ function verify_energy(ncells; niters = 10000, plot_results = false)
     dt = 1e-6
 
     transition_function = HallThruster.StepFunction()
-
-    excitation_model = OVS_Excitation()
-    ionization_model = OVS_Ionization()
-
+    collisional_loss_model = HallThruster.LandmarkLossFit()
     wall_loss_model = HallThruster.ConstantSheathPotential(-20.0, 1.0, 1.0)
     L_ch = 0.025
     propellant = HallThruster.Xenon
@@ -108,29 +103,13 @@ function verify_energy(ncells; niters = 10000, plot_results = false)
     config = (;
         ncharge = 1, source_energy = source_func, implicit_energy = 1.0,
         min_electron_temperature, transition_function, energy_equation, propellant,
-        ionization_model, excitation_model, wall_loss_model, geometry
+        collisional_loss_model, wall_loss_model, geometry
     )
-
-    species = [HallThruster.Xenon(0), HallThruster.Xenon(1)]
-    species_range_dict = Dict([:Xe => 1, Symbol("Xe+") => 0])
-
-    ionization_reactions = HallThruster._load_reactions(config.ionization_model, species)
-    ionization_reactant_indices = HallThruster.reactant_indices(ionization_reactions, species_range_dict)
-    ionization_product_indices = HallThruster.product_indices(ionization_reactions, species_range_dict)
-
-    excitation_reactions = HallThruster._load_reactions(config.excitation_model, species)
-    excitation_reactant_indices = HallThruster.reactant_indices(excitation_reactions, species_range_dict)
-
-    cache = (;Aϵ, bϵ, μ, ϕ, ne, ue, ∇ϕ, Tev)
+    cache = (;Aϵ, bϵ, μ, ϕ, ne, ue, ∇ϕ)
 
     params = (;
-        z_cell, index, Te_L = 2/3 * Te_L, Te_R = 2/3 * Te_R, cache, config,
-        dt, L_ch, propellant,
-        ionization_reactions,
-        ionization_reactant_indices,
-        ionization_product_indices,
-        excitation_reactions,
-        excitation_reactant_indices
+        z_cell, index, Te_L, Te_R, cache, config,
+        dt, L_ch, propellant
     )
 
     solve_energy!(U, params, niters, dt)
@@ -144,18 +123,13 @@ function verify_energy(ncells; niters = 10000, plot_results = false)
     config = (;
         ncharge = 1, source_energy = source_func, implicit_energy = 0.5,
         min_electron_temperature, transition_function, energy_equation, propellant,
-        ionization_model, excitation_model, wall_loss_model, geometry
+        collisional_loss_model, wall_loss_model, geometry
     )
 
     dt = 8 / maximum(abs.(ue)) * (z_cell[2]-z_cell[1])
     params = (;
-        z_cell, index, Te_L = 2/3 * Te_L, Te_R = 2/3 * Te_R , cache, config,
-        dt, L_ch, propellant,
-        ionization_reactions,
-        ionization_reactant_indices,
-        ionization_product_indices,
-        excitation_reactions,
-        excitation_reactant_indices
+        z_cell, index, Te_L, Te_R, cache, config,
+        dt, L_ch, propellant
     )
 
     solve_energy!(U, params, niters, dt)

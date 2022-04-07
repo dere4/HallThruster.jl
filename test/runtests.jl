@@ -5,12 +5,11 @@ doctest(HallThruster)
 include("unit_tests/test_gas.jl")
 include("unit_tests/test_conservation_laws.jl")
 include("unit_tests/test_limiters.jl")
-include("unit_tests/test_reactions.jl")
+include("unit_tests/test_ionization.jl")
 include("unit_tests/test_misc.jl")
 include("unit_tests/test_electrons.jl")
 include("unit_tests/test_boundary_conditions.jl")
 include("unit_tests/test_walls.jl")
-include("unit_tests/test_initialization.jl")
 
 @testset "Order verification (potential and gradients)" begin
     include("order_verification/ovs_funcs.jl")
@@ -56,24 +55,17 @@ end
     limiter = HallThruster.minmod
     flux_names = ("HLLE", "Rusanov")
     fluxes = (HallThruster.HLLE, HallThruster.rusanov)
-    WENO_names = ("WENO off", "WENO on")
-    WENOs = (false, true)
 
     for (flux, flux_name) in zip(fluxes, flux_names)
-        for (WENO, WENO_name) in zip(WENOs, WENO_names)
-            for reconstruct in (false, )
-                scheme = HallThruster.HyperbolicScheme(flux, limiter, reconstruct, WENO)
+        for reconstruct in (false, )
+            scheme = HallThruster.HyperbolicScheme(flux, limiter, reconstruct)
 
-                slopes, norms = test_refinements(ncells -> OVS_Ions.solve_ions(ncells, scheme, false), refinements, [1, 2, Inf])
+            slopes, norms = test_refinements(ncells -> OVS_Ions.solve_ions(ncells, scheme, false), refinements, [1, 2, Inf])
 
-                theoretical_order = 1 + reconstruct
-                for slope in slopes
-                    if WENO
-                        println("WENO slope: ", slope)
-                    else
-                        @test abs(slope - theoretical_order) < 0.2 || slope > theoretical_order
-                    end
-                end
+            theoretical_order = 1 + reconstruct
+
+            for slope in slopes
+                @test abs(slope - theoretical_order) < 0.2
             end
         end
     end
