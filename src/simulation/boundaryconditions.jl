@@ -50,3 +50,42 @@ function right_boundary_state!(bc_state, U, params)
 
     bc_state[index.nϵ] = ne * Te_R
 end
+
+
+
+#anode sheath model mikellides 2010 orca2D neutralizer
+#andrews and varey 1970
+function F_r_bohm(ϕ_barₛ)
+    return exp(-ϕ_barₛ)/(sqrt(pi*ϕ_barₛ)*(1 + erf(sqrt(ϕ_barₛ))))
+end
+
+
+#only use if ϕₛ > 0.01
+function bohm_velocity_F(U, params, ϕₛ)
+    (;Te_L, index, A_ch, config, z_cell) = params
+    mi = config.propellant.m
+        bohm_velocity = sqrt(e * Te_L / (mi*(1 + F_r_bohm(ϕₛ/Te_L))))
+    return bohm_velocity
+end
+
+#for one charge state only
+function sheath_current_ORCA2D(U, params, ϕₛ)
+    (;Te_L, index, A_ch, config, z_cell) = params
+
+    ne = 0.0
+    for Z in 1:params.config.ncharge
+        boundary_density = U[index.ρi[Z], 2]
+        ne += Z * boundary_density / mi
+    end
+
+    j_e_th = ne*sqrt(8*e*Te_L/pi/me)/4
+    if ϕₛ > 0.01
+        j_e = -j_e_th*exp(-ϕₛ/Te_L)
+        j_i = e*ne*sqrt(e * Te_L / (mi*(1 + F_r_bohm(ϕₛ/Te_L))))
+    else
+        j_e = -j_e_th
+        j_i = 0
+    end
+
+    return j_e + j_i
+end
