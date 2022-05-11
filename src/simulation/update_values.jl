@@ -26,7 +26,7 @@ end
 
 #update useful quantities relevant for potential, electron energy and fluid solve
 function update_values!(U, params, t = 0)
-    (;z_cell, index, num_subiterations) = params
+    (;z_cell, index) = params
     (;B, ue, Tev, ∇ϕ, ϕ, pe, ne, μ, ∇pe, νan, νc, νen, νei, νw, Z_eff, νe) = params.cache
 
     mi = params.config.propellant.m

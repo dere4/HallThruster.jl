@@ -8,7 +8,7 @@ function run_sim(duration = 0.0002; ncells = 50, nsave = 2, dt = 1e-8,
         alg = SSPRK22(stage_limiter! = HallThruster.stage_limiter!, step_limiter! = HallThruster.stage_limiter!),
         flux = HallThruster.rusanov, ionization_model = HallThruster.LandmarkIonizationLookup(), transition = HallThruster.LinearTransition(0.001, 0.0),
         coupled = true, LANDMARK = true,
-        progress_interval = 0, WENO = false, L = 0.05
+        progress_interval = 0, WENO = false, L = 0.08
     )
 
     un = 150.0

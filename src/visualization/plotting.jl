@@ -1,4 +1,5 @@
-using Plots: @gif, png, savefig, mm
+using Plots: @gif, png, savefig, mm, plot, plot!
+using FFTW
 
 function landmark_references(case, variable)
     if case > 3
@@ -61,7 +62,7 @@ function plot_quantity(u, z = nothing, zmin = 0.0, zmax = 0.05; normalize_z_fact
     end
 
     plot!(
-        p, z, u; label = label, legend = :outertop, margin = 6mm, left_margin = 20mm, lw = 2,
+        p, z, u; label = label, legend = :outertop, margin = 6mm, left_margin = 8mm, lw = 2,
         color = :black, linestyle = :solid, xlabel = "z (m)"
     )
     return p
@@ -439,15 +440,17 @@ function load_slice(slice_path)
 end
 
 function plot_PSD_current(current, sol)
+    t = sol
+    #t = sol.t
     # Number of points 
-    N = size(current)[2]
+    N = length(t)
     # Sample period
-    Ts = sol.t[2] - sol.t[1]
+    Ts = t[2] - t[1]
     #time
-    t = sol.t
 
     # signal 
-    signal = current[3, :]
+    signal = current
+    #signal = current[3, :]
 
     # Fourier Transform of it 
     F = fft(signal) |> fftshift
@@ -460,7 +463,7 @@ function plot_PSD_current(current, sol)
     min_frequ = 2/t[end]
     # plots
     time_domain = plot(t, signal, title = "Signal", label = "Total current", ylabel = "[A]", xlabel = "time [s]", margin = 5Plots.mm)
-    freq_domain = plot(freqs, abs.(F), title = "Spectrum", ylim =(0, 2500), xlim=(1e5, 2e5), label = "Power spectral density", xlabel = "frequency [Hz]", ylabel = "[dB/Hz]", margin = 5Plots.mm) 
+    freq_domain = plot(freqs, abs.(F), title = "Spectrum", ylim =(0, 20000), xlim=(1e4, 2e5), label = "Power spectral density", xlabel = "frequency [Hz]", ylabel = "[dB/Hz]", margin = 5Plots.mm) 
     #plot(time_domain, freq_domain, layout = 2, size = (1000, 500))
     plot(freq_domain, size = (600, 600))
 end
@@ -476,4 +479,106 @@ end
 function heatmap_onevariable(time_resolved_data, sol, title)
     p1 = heatmap(sol.params.z_cell, sol.t, time_resolved_data, margin = 10Plots.mm, title = title, xlabel = "z (cm)", ylabel = "t (s)", size = (1000, 500))
     return p1
+end
+
+function plot_solution_hallis(u, saved_values, z, case = 1, hallis = nothing, slicezr = nothing, slice = nothing)
+    mi = HallThruster.Xenon.m
+    Xe_0 = HallThruster.Xenon(0)
+    Xe_I = HallThruster.Xenon(1)
+    rxn = HallThruster.load_reactions(HallThruster.LandmarkIonizationLookup(), [Xe_0, Xe_I])[1]
+    (;Tev, ue, ϕ_cell, ∇ϕ, ne, pe, ∇pe) = saved_values
+    ionization_rate = [rxn.rate_coeff(3/2 * Tev[i])*u[1, i]*ne[i]/mi for i in 1:size(u, 2)]
+
+    ref_styles = landmark_styles()
+
+    p_nn = plot_quantity(
+        u[1, :] / mi, z; title = "Neutral density",  ylabel = "nn (m⁻³)",
+        ref_paths = landmark_references(case, "neutral_density"), ref_styles, hallis = hallis, hallisvar = hallis.nn
+    )
+
+    p_ne = plot_quantity(
+        ne, z; title = "Plasma density", ylabel = "ne (m⁻³)",
+        ref_paths = landmark_references(case, "plasma_density"), ref_styles, hallis = hallis, hallisvar = hallis.ne    )
+
+    p_ui = plot_quantity(u[3, :] ./ u[2, :] ./ 1000, z; title = "Ion velocity", ylabel = "ui (km/s)")
+
+    p_iz = plot_quantity(
+        ionization_rate, z; title = "Ionization rate", ylabel = "nϵ (eV m⁻³)",
+        ref_paths = landmark_references(case, "ionization"), ref_styles, hallis = hallis, hallisvar = hallis.ndot
+    )
+
+    p_ϵ  = plot_quantity(
+        u[4, :] ./ ne, z; title = "Electron energy (3/2 Te) (eV)", ylabel = "ϵ (eV)",
+        ref_paths = landmark_references(case, "energy"), ref_styles, hallis = hallis, hallisvar = hallis.Te,
+        
+    )
+
+    p_ue = plot_quantity(ue ./ 1000, z; title = "Electron velocity", ylabel = "ue (km/s)")
+    p_ϕ  = plot_quantity(
+        ϕ_cell, z; title = "Potential", ylabel = "ϕ (V)",
+        ref_paths = landmark_references(case, "potential"), ref_styles, hallis = hallis, hallisvar = hallis.ϕ,
+
+    )
+
+    p_E  = plot_quantity(
+        -∇ϕ, z; title = "Electric field", ylabel = "E (V/m)",
+        ref_paths = landmark_references(case, "electric_field"), ref_styles
+    )
+
+    #p_pe  = plot_quantity(HallThruster.e * pe, z; title = "Electron pressure", ylabel = "∇pe (Pa)")
+    #p_∇pe  = plot_quantity(HallThruster.e * ∇pe, z; title = "Pressure gradient", ylabel = "∇pe (Pa/m)")
+    plot(p_nn, p_ne, p_ϕ, #=p_pe,=# p_ϵ, #=p_∇pe,=# layout = (2, 2), size = (1200, 1000))
+end
+
+
+function plot_solution_hall2de(u, saved_values, z, case = 1, hallis = nothing, slicezr = nothing, slice = nothing)
+    mi = HallThruster.Xenon.m
+    Xe_0 = HallThruster.Xenon(0)
+    Xe_I = HallThruster.Xenon(1)
+    rxn = HallThruster.load_reactions(HallThruster.LandmarkIonizationLookup(), [Xe_0, Xe_I])[1]
+    (;Tev, ue, ϕ_cell, ∇ϕ, ne, pe, ∇pe) = saved_values
+    ionization_rate = [rxn.rate_coeff(3/2 * Tev[i])*u[1, i]*ne[i]/mi for i in 1:size(u, 2)]
+
+    ref_styles = landmark_styles()
+
+    p_nn = plot_quantity(
+        u[1, :] / mi, z; title = "Neutral density",  ylabel = "nn (m⁻³)",
+        ref_paths = landmark_references(case, "neutral_density"), ref_styles,
+        slice = slice, slicevar = slice.nn
+    )
+
+    p_ne = plot_quantity(
+        ne, z; title = "Plasma density", ylabel = "ne (m⁻³)",
+        ref_paths = landmark_references(case, "plasma_density"), ref_styles, 
+        slice = slice, slicevar = slice.ne
+    )
+
+    p_ui = plot_quantity(u[3, :] ./ u[2, :] ./ 1000, z; title = "Ion velocity", ylabel = "ui (km/s)", slice = slice, slicevar = slice.uiz_1_1)
+
+    p_iz = plot_quantity(
+        ionization_rate, z; title = "Ionization rate", ylabel = "nϵ (eV m⁻³)",
+        ref_paths = landmark_references(case, "ionization"), ref_styles
+    )
+
+    p_ϵ  = plot_quantity(
+        u[4, :] ./ ne, z; title = "Electron energy (3/2 Te) (eV)", ylabel = "ϵ (eV)",
+        ref_paths = landmark_references(case, "energy"), ref_styles, 
+        slice = slice, slicevar = slice.Te
+    )
+
+    p_ue = plot_quantity(ue ./ 1000, z; title = "Electron velocity", ylabel = "ue (km/s)")
+    p_ϕ  = plot_quantity(
+        ϕ_cell, z; title = "Potential", ylabel = "ϕ (V)",
+        ref_paths = landmark_references(case, "potential"), ref_styles,
+        slice = slice, slicevar = slice.ϕ
+    )
+
+    p_E  = plot_quantity(
+        -∇ϕ, z; title = "Electric field", ylabel = "E (V/m)",
+        ref_paths = landmark_references(case, "electric_field"), ref_styles
+    )
+
+    #p_pe  = plot_quantity(HallThruster.e * pe, z; title = "Electron pressure", ylabel = "∇pe (Pa)")
+    #p_∇pe  = plot_quantity(HallThruster.e * ∇pe, z; title = "Pressure gradient", ylabel = "∇pe (Pa/m)")
+    plot(p_nn, p_ne, p_ui, p_ϕ, #=p_pe,=# p_iz, p_ϵ, p_ue, p_E, #=p_∇pe,=# layout = (4, 2), size = (1250, 1800))
 end

@@ -4,7 +4,7 @@
     subplot_width = 500
     subplot_height = 500
 
-    plot_layout = (2, 4)
+    plot_layout = (3, 2)
     layout := plot_layout
 
     #delete!(plotattributes, :frame)
@@ -41,6 +41,11 @@
         label := label_mod
         ()
     end
+
+    label = nothing
+    label_mod = ""
+    label_user = ""
+
 
     ne = sol[:ne][frame]
     Tev = sol[:Tev][frame]
@@ -127,7 +132,7 @@
         label := label_mod
         ()
     end
-
+    #=
     # Plot electron velocity
     @series begin
         y := sol[:ue][frame] ./ 1000
@@ -149,4 +154,5 @@
         label := label_mod
         ()
     end
+    =#
 end
